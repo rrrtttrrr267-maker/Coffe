@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CafeFinder</title>
+<style>
+:root{--bg:#0e1116;--card:#171b22;--bd:#262c36;--tx:#e8ebf0;--mu:#8b94a3;--ac:#f5a524;--g:#22c55e;--b:#3b82f6;--y:#eab308}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:#0e1116ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--bd);padding:12px 16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+h1{margin:0;font-size:20px}h1 span{color:var(--ac)}
+input,select,button{background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:8px 12px;font:inherit}
+input[type=search]{flex:1;min-width:140px}
+button{cursor:pointer;transition:.15s}button:hover{border-color:var(--ac);transform:translateY(-1px)}
+.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+.chip{padding:5px 11px;font-size:13px;border-radius:99px}.chip.on{background:var(--ac);color:#111;border-color:var(--ac)}
+label{display:flex;gap:5px;align-items:center;font-size:13px;color:var(--mu)}
+main{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;animation:in .3s both;display:flex;flex-direction:column;gap:6px}
+.card.no{border-color:#22c55e66;box-shadow:0 0 18px #22c55e18}.card.done{opacity:.5}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+.t{display:flex;justify-content:space-between;gap:8px;font-weight:600;font-size:16px}
+.mu{color:var(--mu);font-size:13px}.badge{font-size:12px;border-radius:6px;padding:2px 7px;background:var(--ac);color:#111;font-weight:700}
+.st{font-size:13px;font-weight:600}.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.acts button,.acts a{font-size:12px;padding:5px 9px;border-radius:8px;border:1px solid var(--bd);color:var(--tx);text-decoration:none;background:#0000}
+a{color:var(--b)}#msg{padding:8px 16px;color:var(--mu);font-size:13px}
+</style></head><body>
+<header>
+<div class="row" style="margin:0"><h1>☕ Cafe<span>Finder</span></h1><b id="cnt" class="mu"></b>
+<button class="pri" id="go" style="margin-left:auto">🔍 Найти новые заведения</button></div>
+<div class="row"><input type="search" id="q" placeholder="Поиск по названию, адресу, телефону…">
+<select id="sort"><option value="new">Сначала новые</option><option value="name">По названию</option></select></div>
+<div class="row" id="cats"></div>
+<div class="row" id="cities"></div>
+<div class="row"><input id="cc" placeholder="Свой город" style="width:130px"><button id="add">+ город</button>
+<label><input type="checkbox" id="fNo">Только без сайта</label>
+<label><input type="checkbox" id="fPh">Только с телефоном</label>
+<label><input type="checkbox" id="fFav">Избранное</label>
+<label><input type="checkbox" id="fNew">Только новые</label>
+<button id="csv">⬇ CSV</button></div>
+</header>
+<div id="msg"></div><main id="list"></main>
+<script>
+const CATS={all:'Все',coffee:'☕ Кофейни',sushi:'🍣 Суши',restaurant:'🍽️ Рестораны',pastry:'🎂 Кондитерские',pizza:'🍕 Пиццерии',burger:'🍔 Бургерные',bakery:'🥐 Пекарни',steak:'🥩 Стейк-хаусы',cafe:'🍱 Кафе',asian:'🍜 Азиатская'};
+const TOP=['Москва','Санкт-Петербург','Новосибирск','Екатеринбург','Казань','Нижний Новгород','Челябинск','Самара','Омск','Ростов-на-Дону','Уфа','Красноярск','Воронеж','Пермь','Волгоград','Краснодар'];
+const $=id=>document.getElementById(id),LS=(k,d)=>{try{return JSON.parse(localStorage[k])??d}catch{return d}},SV=(k,v)=>localStorage[k]=JSON.stringify(v);
+let db=LS('cf_db',{}),st=LS('cf_st',{cat:'all',cities:['Москва'],cl:TOP.slice(0,6),russia:false,last:null}),busy=false;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function chips(){
+ $('cats').innerHTML=Object.entries(CATS).map(([k,v])=>`<button class="chip ${st.cat==k?'on':''}" data-c="${k}">${v}</button>`).join('');
+ $('cities').innerHTML=`<button class="chip ${st.russia?'on':''}" data-r="1">🇷🇺 Вся Россия</button>`+st.cl.map(c=>`<button class="chip ${!st.russia&&st.cities.includes(c)?'on':''}" data-t="${esc(c)}">${esc(c)}</button>`).join('');
+}
+$('cats').onclick=e=>{const c=e.target.dataset.c;if(c){st.cat=c;SV('cf_st',st);chips();render()}};
+$('cities').onclick=e=>{const d=e.target.dataset;if(d.r){st.russia=!st.russia}else if(d.t){const i=st.cities.indexOf(d.t);i<0?st.cities.push(d.t):st.cities.splice(i,1);st.russia=false}SV('cf_st',st);chips()};
+$('add').onclick=()=>{const v=$('cc').value.trim();if(!v)return;if(!st.cl.includes(v))st.cl.push(v);if(!st.cities.includes(v))st.cities.push(v);st.russia=false;$('cc').value='';SV('cf_st',st);chips()};
+const msg=t=>$('msg').textContent=t;
+async function check(it){
+ if(!it.website){it.status='none';return}
+ try{const j=await(await fetch('/api/check?url='+encodeURIComponent(it.website))).json();it.status=j.ok?'site':'fail'}catch{it.status='fail'}
+}
+async function search(){
+ if(busy)return;busy=true;$('go').disabled=true;
+ const cities=st.russia?TOP:st.cities;if(!cities.length){msg('Выберите город');busy=false;$('go').disabled=false;return}
+ const runId=Date.now();let added=0,errs=[];
+ for(let i=0;i<cities.length;i++){
+  msg(`Ищу: ${cities[i]} (${i+1}/${cities.length})…`);
+  try{
+   const r=await fetch(`/api/search?city=${encodeURIComponent(cities[i])}&cats=${st.cat}`),j=await r.json();
+   if(!r.ok)throw Error(j.error||r.status);
+   const fresh=[];
+   for(const it of j.items){const o=db[it.id];
+    if(o){Object.assign(o,{phone:it.phone||o.phone,website:it.website||o.website,address:it.address||o.address});o.isNew=o.isNew&&o.firstSeen>Date.now()-864e5*3}
+    else{db[it.id]={...it,firstSeen:runId,isNew:true,fav:false,done:false};fresh.push(db[it.id]);added++}}
+   SV('cf_db',db);render();
+   for(const it of fresh){await check(it)}
+   for(const o of Object.values(db))if(o.website&&!o.status&&o.city){await check(o)}
+   SV('cf_db',db);render();
+  }catch(e){errs.push(`${cities[i]}: ${e.message}`)}
+ }
+ st.last=Date.now();SV('cf_st',st);
+ msg(`Проверено ${new Date(st.last).toLocaleString('ru')} · новых: ${added}`+(errs.length?` · ошибки: ${errs.join('; ')}`:''));
+ busy=false;$('go').disabled=false;render();
+}
+const SL={none:['🟢 Сайта нет','var(--g)'],site:['🔵 Сайт есть','var(--b)'],fail:['🟡 Не удалось проверить','var(--y)']};
+function view(){
+ const q=$('q').value.toLowerCase();
+ let a=Object.values(db).filter(i=>(st.cat=='all'||i.category==st.cat)&&(!$('fNo').checked||!i.website)&&(!$('fPh').checked||i.phone)&&(!$('fFav').checked||i.fav)&&(!$('fNew').checked||i.isNew)&&(!q||[i.name,i.address,i.phone,i.city].join(' ').toLowerCase().includes(q)));
+ a.sort($('sort').value=='name'?(x,y)=>x.name.localeCompare(y.name):(x,y)=>(!x.website)-(!y.website)||y.firstSeen-x.firstSeen);
+ return a;
+}
+function render(){
+ const a=view();$('cnt').textContent=`Найдено: ${a.length} / в базе: ${Object.keys(db).length}`;
+ $('list').innerHTML=a.slice(0,300).map(i=>{const s=SL[i.status||(i.website?'fail':'none')];
+ return `<div class="card ${!i.website?'no':''} ${i.done?'done':''}"><div class="t"><span>${esc(i.name)}</span>${i.isNew?'<span class="badge">NEW</span>':''}</div>
+ <div class="mu">${CATS[i.category]||''} · ${esc(i.city)}${i.address?', '+esc(i.address):''}</div>
+ <div>📞 ${i.phone?esc(i.phone):'<span class="mu">нет в базе</span>'}</div>
+ <div class="st" style="color:${s[1]}">${s[0]}</div>
+ ${i.website?`<div class="mu">🌐 <a href="${esc(/^https?:/.test(i.website)?i.website:'http://'+i.website)}" target="_blank" rel="noopener">${esc(i.website)}</a></div>`:`<div class="mu">Нет в OSM — проверьте вручную: <a target="_blank" rel="noopener" href="https://yandex.ru/search/?text=${encodeURIComponent(i.name+' '+i.city+' сайт')}">поиск</a></div>`}
+ <div class="mu">Источник: ${esc(i.source)} · ${new Date(i.firstSeen).toLocaleDateString('ru')}</div>
+ <div class="acts"><a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${i.lat}&mlon=${i.lon}#map=18/${i.lat}/${i.lon}">📍 Карта</a>
+ ${i.phone?`<button data-a="ph" data-id="${i.id}">📋 Телефон</button>`:''}<button data-a="nm" data-id="${i.id}">📋 Название</button>
+ <button data-a="fav" data-id="${i.id}">${i.fav?'★':'☆'} Избранное</button><button data-a="done" data-id="${i.id}">${i.done?'↩ Вернуть':'✅ Уже связался'}</button></div></div>`}).join('')||'<p class="mu">Ничего не найдено. Нажмите «Найти новые заведения».</p>';
+}
+$('list').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;const i=db[b.dataset.id],a=b.dataset.a;
+ if(a=='ph')navigator.clipboard.writeText(i.phone);if(a=='nm')navigator.clipboard.writeText(i.name);
+ if(a=='fav')i.fav=!i.fav;if(a=='done')i.done=!i.done;SV('cf_db',db);render()};
+$('csv').onclick=()=>{const rows=[['Название','Категория','Телефон','Город','Адрес','Сайт','Статус','Источник','Связались']];
+ view().forEach(i=>rows.push([i.name,CATS[i.category],i.phone,i.city,i.address,i.website,SL[i.status||(i.website?'fail':'none')][0],i.source,i.done?'да':'']));
+ const t=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(';')).join('\n');
+ const l=document.createElement('a');l.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv'}));l.download='cafefinder.csv';l.click()};
+['q','sort','fNo','fPh','fFav','fNew'].forEach(k=>$(k).oninput=render);
+$('go').onclick=search;chips();render();search();setInterval(search,30*60*1000);
+</script></body></html>
